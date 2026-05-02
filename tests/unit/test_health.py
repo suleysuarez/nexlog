@@ -1,9 +1,12 @@
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 from app.main import app
 
 client = TestClient(app)
 
 def test_health():
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    with patch("app.main.client") as mock_client:
+        mock_client.admin.command.return_value = {"ok": 1}
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
