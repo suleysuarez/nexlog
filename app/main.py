@@ -5,7 +5,7 @@ from pymongo import MongoClient
 app = FastAPI(title="NexLog API")
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
-DB_NAME = os.getenv("DB_NAME", "fintech_logs")
+DB_NAME = os.getenv("DB_NAME", "nexlog")
 
 client = MongoClient(MONGO_URL)
 db = client[DB_NAME]
