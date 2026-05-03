@@ -1,7 +1,32 @@
+import os
 from fastapi import FastAPI
-from app.database import client
+from contextlib import asynccontextmanager
+from motor.motor_asyncio import AsyncIOMotorClient
+from app.database import crear_indices
+from app.routes.logs import router
 
-app = FastAPI(title="NexLog API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await crear_indices()
+    yield
+
+app = FastAPI(
+    title="NexLog API",
+    description=(
+        "Sistema de observabilidad y logging para Nequi (Bancolombia). "
+        "Registra 6 tipos de eventos: AUTH, TRANSACTION, SECURITY, ERROR, AUDIT, ACCESS."
+    ),
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.include_router(router, prefix="/api/v1")
+
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+DB_NAME = os.getenv("DB_NAME", "nexlog")
+
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
 
 @app.get("/health")
 async def health():
