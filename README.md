@@ -1,24 +1,3 @@
-# NexLog
-
-API de logs financieros construida con FastAPI y MongoDB.
-
-## Stack
-- FastAPI
-- MongoDB
-- Docker + Docker Compose
-- GitHub Actions CI/CD
-
-## Levantar el proyecto
-
-```bash
-docker compose up -d
-```
-
-## Ejecutar tests de carga
-
-```bash
-./run_load_test.sh
-```
 # NexLog — Sistema de observabilidad para Fintech
 
 Sistema de logging y observabilidad para **Nequi** (Bancolombia). Registra 6 tipos de eventos del ciclo de vida de una operación financiera: `AUTH`, `TRANSACTION`, `SECURITY`, `ERROR`, `AUDIT`, `ACCESS`. Construido con FastAPI + Motor async + MongoDB, contenerizado con Docker y con pipeline CI/CD automatizado en GitHub Actions.
@@ -123,16 +102,23 @@ correlation_id une AUTH + TRANSACTION + AUDIT del mismo flujo
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/equipo/nexlog.git
+git clone https://github.com/suleysuarez/nexlog.git
 cd nexlog
 
-# 2. Levantar todo el sistema
+# 2. Cambiarse a develop
+git checkout develop
+git pull origin develop
+
+# 3. Crear tu rama de trabajo
+git checkout -b feature/lo-que-hagas
+
+# 4. Levantar todo el sistema
 docker compose up -d
 
-# 3. Verificar que funciona
+# 5. Verificar que funciona
 curl http://localhost:8000/health
 
-# 4. Poblar con datos de prueba
+# 6. Poblar con datos de prueba
 docker compose exec api python scripts/seed.py
 ```
 
@@ -142,15 +128,15 @@ La documentación interactiva de la API estará disponible en: **http://localhos
 
 ## Endpoints de la API
 
-| Método | Ruta                              | Descripción                        | Status codes     |
-|--------|-----------------------------------|------------------------------------|------------------|
-| GET    | `/health`                         | Estado del servicio                | 200              |
-| POST   | `/api/v1/logs`                    | Crear un nuevo log                 | 201, 422         |
-| GET    | `/api/v1/logs`                    | Listar logs con filtros y paginación | 200            |
-| GET    | `/api/v1/logs/{id}`               | Detalle de un log por su `_id`     | 200, 400, 404    |
-| PUT    | `/api/v1/logs/{id}`               | Actualizar `severity` o `detail`   | 200, 400, 404    |
-| DELETE | `/api/v1/logs/{id}`               | Eliminar un log                    | 204, 400, 404    |
-| GET    | `/api/v1/logs/traza/{corr_id}`    | Trazabilidad completa por operación| 200, 404         |
+| Método | Ruta                              | Descripción                          | Status codes     |
+|--------|-----------------------------------|--------------------------------------|------------------|
+| GET    | `/health`                         | Estado del servicio                  | 200              |
+| POST   | `/api/v1/logs`                    | Crear un nuevo log                   | 201, 422         |
+| GET    | `/api/v1/logs`                    | Listar logs con filtros y paginación | 200              |
+| GET    | `/api/v1/logs/{id}`               | Detalle de un log por su `_id`       | 200, 400, 404    |
+| PUT    | `/api/v1/logs/{id}`               | Actualizar `severity` o `detail`     | 200, 400, 404    |
+| DELETE | `/api/v1/logs/{id}`               | Eliminar un log                      | 204, 400, 404    |
+| GET    | `/api/v1/logs/traza/{corr_id}`    | Trazabilidad completa por operación  | 200, 404         |
 
 ---
 
@@ -165,30 +151,30 @@ GET /api/v1/logs?user_id=usr_col_3829104
 GET /api/v1/logs?correlation_id=corr_nequi_8f3a&limit=50&skip=0
 ```
 
-| Parámetro       | Tipo     | Descripción                                   |
-|-----------------|----------|-----------------------------------------------|
-| `type`          | string   | Tipo de log: AUTH, TRANSACTION, SECURITY, ERROR, AUDIT, ACCESS |
-| `service`       | string   | Microservicio que generó el evento            |
-| `severity`      | string   | Nivel: DEBUG, INFO, WARNING, ERROR, CRITICAL  |
-| `from_date`     | datetime | Filtro de fecha inicio                        |
-| `to_date`       | datetime | Filtro de fecha fin                           |
-| `user_id`       | string   | Usuario o microservicio que generó el evento  |
-| `correlation_id`| string   | Agrupa todos los logs de una misma operación  |
-| `limit`         | int      | Documentos por página (máx. 100, default: 20) |
-| `skip`          | int      | Desplazamiento para paginación (default: 0)   |
+| Parámetro        | Tipo     | Descripción                                                        |
+|------------------|----------|--------------------------------------------------------------------|
+| `type`           | string   | Tipo de log: AUTH, TRANSACTION, SECURITY, ERROR, AUDIT, ACCESS     |
+| `service`        | string   | Microservicio que generó el evento                                 |
+| `severity`       | string   | Nivel: DEBUG, INFO, WARNING, ERROR, CRITICAL                       |
+| `from_date`      | datetime | Filtro de fecha inicio                                             |
+| `to_date`        | datetime | Filtro de fecha fin                                                |
+| `user_id`        | string   | Usuario o microservicio que generó el evento                       |
+| `correlation_id` | string   | Agrupa todos los logs de una misma operación                       |
+| `limit`          | int      | Documentos por página (máx. 100, default: 20)                      |
+| `skip`           | int      | Desplazamiento para paginación (default: 0)                        |
 
 ---
 
 ## Tipos de log
 
-| Tipo        | Descripción                                      | Retención |
-|-------------|--------------------------------------------------|-----------|
-| AUTH        | Autenticación — cada acceso a la app Nequi       | 1 año     |
-| TRANSACTION | Pagos, transferencias y depósitos (P2P, P2B, RECHARGE) | 3 años |
-| SECURITY    | Alertas del motor antifraude                     | 90 días   |
-| ERROR       | Fallos técnicos del sistema                      | 90 días   |
-| AUDIT       | Cambios en datos del usuario — **obligatorio SFC 029/2014** | 5 años |
-| ACCESS      | Registro HTTP de cada llamada a la API           | 30 días   |
+| Tipo        | Descripción                                                   | Retención |
+|-------------|---------------------------------------------------------------|-----------|
+| AUTH        | Autenticación — cada acceso a la app Nequi                    | 1 año     |
+| TRANSACTION | Pagos, transferencias y depósitos (P2P, P2B, RECHARGE)        | 3 años    |
+| SECURITY    | Alertas del motor antifraude                                  | 90 días   |
+| ERROR       | Fallos técnicos del sistema                                   | 90 días   |
+| AUDIT       | Cambios en datos del usuario — **obligatorio SFC 029/2014**   | 5 años    |
+| ACCESS      | Registro HTTP de cada llamada a la API                        | 30 días   |
 
 ---
 
@@ -228,12 +214,14 @@ nexlog/
 ├── tests/
 │   ├── conftest.py      ← fixtures compartidos
 │   ├── unit/            ← tests con mocks (sin MongoDB)
+│   │   ├── test_health.py
+│   │   ├── test_health_extended.py
 │   │   ├── test_post_logs.py
 │   │   ├── test_get_logs.py
 │   │   └── test_put_delete_logs.py
 │   └── integration/     ← tests con MongoDB real (fintech_logs_test)
 │       ├── conftest.py
-│       └── test_crud_completo.py
+│       └── test_connection.py
 ├── k6/
 │   └── k6_script.js     ← tests de carga con escenarios mixtos
 ├── .github/
@@ -304,27 +292,27 @@ docker compose up -d --build
 
 ## Microservicios de Nequi
 
-| Microservicio          | Función                                          | Tipos de log generados     |
-|------------------------|--------------------------------------------------|----------------------------|
-| auth-service           | Autenticación, biometría, tokens JWT             | AUTH, ACCESS               |
-| pagos-service          | Transferencias P2P                               | TRANSACTION, ERROR         |
-| recarga-service        | Depósitos de efectivo (Efecty, Baloto)           | TRANSACTION, ERROR         |
-| antifraude-service     | Motor de detección de fraude                     | SECURITY                   |
-| auditoria-service      | Cambios en datos sensibles del usuario           | AUDIT                      |
-| gateway-service        | API Gateway — enruta todas las peticiones HTTP   | ACCESS                     |
-| notificaciones-service | Push, SMS y notificaciones                       | ERROR, ACCESS              |
-| pse-service            | Pagos QR en establecimientos (P2B)               | TRANSACTION, ERROR         |
+| Microservicio           | Función                                        | Tipos de log generados |
+|-------------------------|------------------------------------------------|------------------------|
+| auth-service            | Autenticación, biometría, tokens JWT           | AUTH, ACCESS           |
+| pagos-service           | Transferencias P2P                             | TRANSACTION, ERROR     |
+| recarga-service         | Depósitos de efectivo (Efecty, Baloto)         | TRANSACTION, ERROR     |
+| antifraude-service      | Motor de detección de fraude                   | SECURITY               |
+| auditoria-service       | Cambios en datos sensibles del usuario         | AUDIT                  |
+| gateway-service         | API Gateway — enruta todas las peticiones HTTP | ACCESS                 |
+| notificaciones-service  | Push, SMS y notificaciones                     | ERROR, ACCESS          |
+| pse-service             | Pagos QR en establecimientos (P2B)             | TRANSACTION, ERROR     |
 
 ---
 
 ## Equipo
 
-| Persona   | Rol                        | Responsabilidades                              |
-|-----------|----------------------------|------------------------------------------------|
-| Persona 1 | Arquitecto de datos        | MongoDB, esquemas, seed.py                     |
-| Persona 2 | Desarrollador de API       | FastAPI, Motor async, Pydantic, endpoints CRUD |
-| Persona 3 | DevOps                     | Docker, GitHub Actions, tests de carga k6      |
-| Persona 4 | QA y documentación         | pytest, diagramas, README                      |
+| Persona   | Nombre            | Rol                   | Responsabilidades                              |
+|-----------|-------------------|-----------------------|------------------------------------------------|
+| Persona 1 | Jherson Sanchez   | Arquitecto de datos   | MongoDB, esquemas, seed.py                     |
+| Persona 2 | Sebastian Valero  | Desarrollador de API  | FastAPI, Motor async, Pydantic, endpoints CRUD |
+| Persona 3 | Suley Suarez      | DevOps                | Docker, GitHub Actions, tests de carga k6      |
+| Persona 4 | Jhonatan Vera     | QA y documentación    | pytest, diagramas, README                      |
 
 ---
 
