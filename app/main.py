@@ -7,11 +7,6 @@ from app.routes.logs import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Ciclo de vida de la app:
-    - Al iniciar: crear índices en MongoDB (idempotente, seguro correrlo siempre).
-    - Al cerrar: nada que limpiar (Motor cierra la conexión automáticamente).
-    """
     await crear_indices()
     yield
 
@@ -25,7 +20,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Todos los endpoints bajo /api/v1
 app.include_router(router, prefix="/api/v1")
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
