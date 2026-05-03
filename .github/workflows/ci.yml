@@ -1,0 +1,56 @@
+name: NexLog CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  test:
+    name: Tests unitarios
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt pytest pytest-asyncio httpx
+      - name: Correr tests unitarios
+        run: pytest tests/unit/ -v
+
+  integration-test:
+    name: Tests de integración
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt pytest pytest-asyncio httpx
+      - name: Levantar MongoDB
+        run: |
+          docker run -d --name mongodb \
+            -p 27017:27017 \
+            mongo:7.0
+          sleep 15
+      - name: Correr tests de integración
+        env:
+          MONGO_URL: mongodb://localhost:27017
+          DB_NAME: nexlog_test
+        run: pytest tests/integration/ -v
+
+  build:
+    name: Construir imagen Docker
+    runs-on: ubuntu-latest
+    needs: integration-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir imagen
+        run: docker build -t nexlog-api:${{ github.sha }} .
+      - name: Verificar imagen
+        run: docker images | grep nexlog-api
