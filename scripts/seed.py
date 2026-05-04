@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 from faker import Faker
@@ -7,8 +8,10 @@ import uuid
 
 fake = Faker('es_CO')
 
-client = AsyncIOMotorClient('mongodb://localhost:27017')
-db     = client['fintech_logs']
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+DB_NAME = os.getenv("DB_NAME", "nexlog")
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
 
 # ── Datos del contexto Nequi Colombia ─────────────────────────────────
 SERVICIOS = [
