@@ -1,19 +1,30 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
 from app.main import app
 
 @pytest.fixture
-def client():
-    return TestClient(app)
+async def client():
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
 
 @pytest.fixture
-def mock_db():
-    with patch("app.main.db") as mock:
-        mock.logs = MagicMock()
-        mock.logs.insert_one = AsyncMock(return_value=MagicMock(inserted_id="fake_id"))
-        mock.logs.find = MagicMock()
-        mock.logs.find_one = AsyncMock(return_value=None)
-        mock.logs.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
-        mock.logs.delete_one = AsyncMock(return_value=MagicMock(deleted_count=1))
-        yield mock
+def log_valido():
+    return {
+        "type": "AUTH",
+        "severity": "INFO",
+        "service": "auth-service",
+        "correlation_id": "corr_nequi_test_001",
+        "user_id": "usr_col_test_001",
+        "detail": {
+            "auth_method": "PIN",
+            "result": "SUCCESS",
+            "failed_attempts": 0,
+            "device_id": "dev_and_test",
+            "ip_address": "190.24.55.0",
+            "city": "Bogota",
+            "token_issued": True,
+        },
+    }
