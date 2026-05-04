@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # NexLog
 
 API de logs financieros construida con FastAPI y MongoDB.
@@ -19,3 +20,6 @@ docker compose up -d
 ```bash
 ./run_load_test.sh
 ```
+=======
+# nexlog
+>>>>>>> 64d0c6dbfe80e18306ccbeb40a3af50d90ed3000
