@@ -7,78 +7,13 @@ Sistema de logging y observabilidad para **Nequi** (Bancolombia). Registra 6 tip
 ## Arquitectura
 
 ### Diagrama 1 — Componentes del sistema
-
-```
-┌─────────────┐   HTTP REST    ┌──────────────────────────────────┐   Motor async   ┌─────────────────────┐
-│   Cliente   │ ─────────────► │         FastAPI (nexlog-api)     │ ───────────────► │      MongoDB        │
-│  Postman /  │                │  ┌────────────┐  ┌────────────┐  │                  │   fintech_logs      │
-│    App      │                │  │  Pydantic  │  │Motor async │  │                  │  ┌───────────────┐  │
-└─────────────┘                │  │ Validación │  │   Driver   │  │                  │  │ colección logs│  │
-                               │  └────────────┘  └────────────┘  │                  │  └───────────────┘  │
-                               └──────────────────────────────────┘                  │  ┌───────────────┐  │
-                                                                                      │  │    Índices    │  │
-                                                                                      │  │ timestamp,TTL │  │
-                                                                                      │  └───────────────┘  │
-                                                                                      └─────────────────────┘
-```
+![Componentes](docs/diagramas/diagrama_componentes.png)
 
 ### Diagrama 2 — Despliegue Docker
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  HOST (máquina local o servidor)                                     │
-│                                                                      │
-│  ┌──────────────────────────┐    ┌──────────────────────────────┐   │
-│  │   nexlog-api             │    │   nexlog-mongodb             │   │
-│  │   Contenedor API         │    │   Contenedor MongoDB         │   │
-│  │                          │    │                              │   │
-│  │  Imagen: python:3.12-slim│    │  Imagen: mongo:7.0           │   │
-│  │  Puerto: 8000:8000       │    │  Puerto: 27017:27017         │   │
-│  │  healthcheck: /health    │    │  healthcheck: mongosh ping   │   │
-│  └────────────┬─────────────┘    └──────────────────────────────┘   │
-│               │         Motor async (red interna)         │          │
-│               └──────────────────────────────────────────►│          │
-│                                                            │          │
-│               Red interna Docker — nexlog-network          │          │
-│                                                  ┌─────────┴───────┐ │
-│                                                  │  mongodb_data   │ │
-│                                                  │  Volumen        │ │
-│                                                  │  persistente    │ │
-│                                                  └─────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
-         ▲
-         │ localhost:8000
-  Navegador / Postman
-```
+![Despliegue](docs/diagramas/diagrama_despliegue.png)
 
 ### Diagrama 3 — Flujo de alto nivel
-
-```
-Usuario Nequi
-     │  Hace una transferencia
-     ▼
-  App Nequi
-     │  HTTP POST /logs
-     ▼
-API NexLog (FastAPI)
-  ├── Valida con Pydantic
-  └── Calcula expires_at automáticamente
-     │  Motor async
-     ▼
-  MongoDB — colección: logs
-     │
-     ├── AUTH        (retención: 1 año)
-     ├── TRANSACTION (retención: 3 años)
-     ├── SECURITY    (retención: 90 días)
-     ├── ERROR       (retención: 90 días)
-     ├── AUDIT       (retención: 5 años — obligatorio SFC 029/2014)
-     └── ACCESS      (retención: 30 días)
-          │
-          ▼
-     TTL automático — MongoDB elimina según expires_at
-
-correlation_id une AUTH + TRANSACTION + AUDIT del mismo flujo
-```
+![Alto nivel](docs/diagramas/diagrama_alto_nivel.png)
 
 ---
 
@@ -197,6 +132,14 @@ pytest tests/ -v
 ./run_load_test.sh
 ```
 
+### Resultados actuales
+
+```
+38 passed in 1.64s
+├── tests/integration/  →  8 tests  ✅
+└── tests/unit/         → 30 tests  ✅
+```
+
 ---
 
 ## Estructura del proyecto
@@ -218,10 +161,16 @@ nexlog/
 │   │   ├── test_health_extended.py
 │   │   ├── test_post_logs.py
 │   │   ├── test_get_logs.py
-│   │   └── test_put_delete_logs.py
+│   │   └── test_put_delete_traza_logs.py
 │   └── integration/     ← tests con MongoDB real (fintech_logs_test)
 │       ├── conftest.py
-│       └── test_connection.py
+│       ├── test_connection.py
+│       └── test_crud_completo.py
+├── docs/
+│   └── diagramas/
+│       ├── diagrama_componentes.png
+│       ├── diagrama_despliegue.png
+│       └── diagrama_alto_nivel.png
 ├── k6/
 │   └── k6_script.js     ← tests de carga con escenarios mixtos
 ├── .github/
