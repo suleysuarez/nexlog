@@ -1,27 +1,30 @@
-import asyncio
 import os
-from datetime import datetime, timedelta, timezone
-from motor.motor_asyncio import AsyncIOMotorClient
-from faker import Faker
 import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from faker import Faker
-from pymongo import MongoClient, ASCENDING, InsertOne
+from pymongo import ASCENDING, DESCENDING, InsertOne, MongoClient
 from pymongo.errors import BulkWriteError
 
-# ─── CONFIGURACIÓN ────────────────────────────────────────────────────────────
-MONGO_URI = "mongodb://localhost:27017"
-DB_NAME   = "fintech_logs"
-COL_NAME  = "logs"
-TOTAL     = 9_000
-BATCH_SIZE = 500          # inserciones por lote (bulk_write)
-
+# ─── CONFIGURACIÓN (misma convención que app/database.py y docker-compose) ───
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = os.getenv("DB_NAME", "nexlog")
-client = AsyncIOMotorClient(MONGO_URL)
-db = client[DB_NAME]
+COL_NAME = os.getenv("COL_NAME", "logs")
+TOTAL = 9_000
+BATCH_SIZE = 500
+
+fake = Faker()
+
+# Alineado con app/models.py RETENTION (expires_at lo exige LogResponse)
+RETENTION: dict[str, timedelta] = {
+    "ACCESS": timedelta(days=30),
+    "ERROR": timedelta(days=90),
+    "SECURITY": timedelta(days=90),
+    "AUTH": timedelta(days=365),
+    "TRANSACTION": timedelta(days=365 * 3),
+    "AUDIT": timedelta(days=365 * 5),
+}
 
 # ─── CATÁLOGOS DE NEGOCIO (contexto Nequi / Colombia) ─────────────────────────
 SERVICIOS = [
@@ -82,11 +85,11 @@ ENDPOINTS_API = [
     "/api/v1/retiros", "/api/v1/historial", "/api/v1/qr/generar",
 ]
 
-# ─── GENERADORES DE CORRELATION_ID ────────────────────────────────────────────
+
 def nuevo_correlation_id() -> str:
     return f"corr_nequi_{uuid.uuid4().hex[:16]}"
 
-# ─── TIMESTAMP ALEATORIO (últimos 90 días) ────────────────────────────────────
+
 def timestamp_aleatorio() -> datetime:
     delta = timedelta(
         days=random.randint(0, 90),
@@ -94,21 +97,24 @@ def timestamp_aleatorio() -> datetime:
         minutes=random.randint(0, 59),
         seconds=random.randint(0, 59),
     )
-    return datetime.utcnow() - delta
+    return datetime.now(timezone.utc) - delta
 
-# ─── CAMPO BASE COMÚN ─────────────────────────────────────────────────────────
-def base_log(tipo: str, severidad: str, servicio: str, correlation_id: str) -> dict:
+
+def base_log(log_type: str, severity: str, service: str, correlation_id: str) -> dict:
+    ts = timestamp_aleatorio()
     return {
-        "tipo":           tipo,
-        "severidad":      severidad,
-        "timestamp":      timestamp_aleatorio(),
-        "servicio":       servicio,
+        "type": log_type,
+        "severity": severity,
+        "timestamp": ts,
+        "service": service,
         "correlation_id": correlation_id,
-        "usuario_id":     f"usr_{uuid.uuid4().hex[:10]}",
-        "version_app":    random.choice(VERSIONES_APP),
+        "user_id": f"usr_{uuid.uuid4().hex[:10]}",
+        "version_app": random.choice(VERSIONES_APP),
+        "expires_at": ts + RETENTION[log_type],
+        "detail": {},
     }
 
-# ─── GENERADORES DE DETALLE POR TIPO ──────────────────────────────────────────
+
 def detalle_auth() -> dict:
     metodo = random.choice(["PIN", "BIOMETRIA", "OTP_SMS", "FACE_ID"])
     exitoso = random.random() > 0.15
@@ -126,6 +132,7 @@ def detalle_auth() -> dict:
             "PIN_INCORRECTO", "BIOMETRIA_NO_COINCIDE", "OTP_EXPIRADO"
         ]),
     }
+
 
 def detalle_transaction() -> dict:
     tipo_tx = random.choice(TIPOS_TRANSACCION)
@@ -147,6 +154,7 @@ def detalle_transaction() -> dict:
         ]),
     }
 
+
 def detalle_security() -> dict:
     nivel_riesgo = random.choice(["BAJO", "MEDIO", "ALTO", "CRITICO"])
     return {
@@ -162,6 +170,7 @@ def detalle_security() -> dict:
         "revisado_por":       f"analista_{random.randint(1, 20):03d}" if nivel_riesgo == "CRITICO" else None,
     }
 
+
 def detalle_error() -> dict:
     return {
         "tipo_error":         random.choice(ERRORES_TECNICOS),
@@ -174,6 +183,7 @@ def detalle_error() -> dict:
         "codigo_http":        random.choice([500, 502, 503, 504, 429]),
     }
 
+
 def detalle_audit() -> dict:
     return {
         "accion":             random.choice(ACCIONES_AUDIT),
@@ -184,11 +194,12 @@ def detalle_audit() -> dict:
         "valor_anterior_hash": uuid.uuid4().hex[:32],
         "valor_nuevo_hash":    uuid.uuid4().hex[:32],
         "motivo":             fake.sentence(nb_words=6),
-        "ip_origen_hash":     uuid.uuid4().hex[:16],   # IP hasheada, no en texto plano
+        "ip_origen_hash":     uuid.uuid4().hex[:16],
         "aprobado_por":       f"supervisor_{random.randint(1, 10):02d}",
         "canal_solicitud":    random.choice(["APP_MOVIL", "CALL_CENTER", "OFICINA"]),
-        "cumple_sfc_029":     True,   # campo de trazabilidad regulatoria obligatorio
+        "cumple_sfc_029":     True,
     }
+
 
 def detalle_access() -> dict:
     codigo = random.choices(
@@ -203,11 +214,11 @@ def detalle_access() -> dict:
         "tiempo_respuesta_ms": random.randint(20, 2500),
         "bytes_respuesta":    random.randint(128, 65536),
         "user_agent":         f"NequiApp/{random.choice(VERSIONES_APP)} ({random.choice(SISTEMAS_OS)})",
-        "ip_hash":            uuid.uuid4().hex[:16],   # IP hasheada
+        "ip_hash":            uuid.uuid4().hex[:16],
         "exitoso":            codigo < 400,
     }
 
-# ─── MAPA DE CONFIGURACIÓN POR TIPO ───────────────────────────────────────────
+
 TIPO_CONFIG = {
     "AUTH": {
         "cantidad":   1_800,
@@ -247,18 +258,15 @@ TIPO_CONFIG = {
     },
 }
 
-# ─── GENERACIÓN DE OPERACIONES ENCADENADAS (trazabilidad) ─────────────────────
-# Se generan 300 correlation_ids compartidos para simular operaciones reales
-# donde múltiples logs pertenecen a la misma transacción.
 POOL_CORRELATION = [nuevo_correlation_id() for _ in range(300)]
 
+
 def obtener_correlation_id() -> str:
-    """70% de probabilidad de reutilizar un ID del pool (trazabilidad real)."""
     if random.random() < 0.70:
         return random.choice(POOL_CORRELATION)
     return nuevo_correlation_id()
 
-# ─── GENERACIÓN DE DOCUMENTOS ─────────────────────────────────────────────────
+
 def generar_documentos() -> list:
     docs = []
     for tipo, cfg in TIPO_CONFIG.items():
@@ -267,12 +275,12 @@ def generar_documentos() -> list:
             servicio  = random.choice(cfg["servicios"])
             corr_id   = obtener_correlation_id()
             doc = base_log(tipo, severidad, servicio, corr_id)
-            doc["detalle"] = cfg["detalle_fn"]()
+            doc["detail"] = cfg["detalle_fn"]()
             docs.append(doc)
-    random.shuffle(docs)   # romper el orden por tipo
+    random.shuffle(docs)
     return docs
 
-# ─── INSERCIÓN EN LOTES ───────────────────────────────────────────────────────
+
 def insertar_en_lotes(coleccion, documentos: list):
     total_insertados = 0
     for i in range(0, len(documentos), BATCH_SIZE):
@@ -286,29 +294,39 @@ def insertar_en_lotes(coleccion, documentos: list):
             print(f"  ⚠ Error en lote {i // BATCH_SIZE + 1}: {bwe.details['nInserted']} insertados parcialmente")
     return total_insertados
 
-# ─── CREAR ÍNDICES ────────────────────────────────────────────────────────────
-def crear_indices(coleccion):
-    print("\n📑 Creando índices...")
-    coleccion.create_index([("timestamp", ASCENDING)],  name="idx_timestamp")
-    coleccion.create_index([("tipo",      ASCENDING)],  name="idx_tipo")
-    coleccion.create_index([("servicio",  ASCENDING)],  name="idx_servicio")
-    coleccion.create_index([("usuario_id",ASCENDING)],  name="idx_usuario_id")
-    coleccion.create_index([("correlation_id", ASCENDING)], name="idx_correlation_id")
-    print("   ✓ 5 índices creados (timestamp, tipo, servicio, usuario_id, correlation_id)")
 
-# ─── MAIN ─────────────────────────────────────────────────────────────────────
+def crear_indices(coleccion):
+    """Índices alineados con app/database.py."""
+    print("\n📑 Creando índices...")
+    coleccion.create_index([("timestamp", ASCENDING)], name="idx_timestamp")
+    coleccion.create_index([("type", ASCENDING)], name="idx_type")
+    coleccion.create_index([("service", ASCENDING)], name="idx_service")
+    coleccion.create_index([("user_id", ASCENDING)], name="idx_user_id")
+    coleccion.create_index([("correlation_id", ASCENDING)], name="idx_correlation_id")
+    coleccion.create_index(
+        "expires_at",
+        name="idx_ttl_expires_at",
+        expireAfterSeconds=0,
+    )
+    coleccion.create_index(
+        [("type", ASCENDING), ("timestamp", DESCENDING)],
+        name="idx_type_timestamp",
+    )
+    print("   ✓ Índices creados (timestamp, type, service, user_id, correlation_id, TTL, compuesto)")
+
+
 def main():
     print("═" * 60)
-    print("  NexLog — Seeding 9.000 documentos en fintech_logs")
+    print(f"  NexLog — Seeding {TOTAL} documentos en {DB_NAME}.{COL_NAME}")
     print("═" * 60)
 
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=5000)
     try:
         client.admin.command("ping")
-        print(f"✓ Conectado a MongoDB: {MONGO_URI}\n")
+        print(f"✓ Conectado a MongoDB: {MONGO_URL}\n")
     except Exception as e:
         print(f"✗ No se pudo conectar a MongoDB: {e}")
-        print("  Verifica que MongoDB esté corriendo en localhost:27017")
+        print("  Verifica MONGO_URL y que el servidor esté en marcha.")
         return
 
     db  = client[DB_NAME]
@@ -330,15 +348,15 @@ def main():
 
     crear_indices(col)
 
-    # ─ Resumen final ──────────────────────────────────────────────────────────
     print("\n📊 Resumen por tipo de log:")
     for tipo in TIPO_CONFIG:
-        conteo = col.count_documents({"tipo": tipo})
+        conteo = col.count_documents({"type": tipo})
         print(f"   {tipo:<15} {conteo:>5} documentos")
 
     print(f"\n✅ Seeding completado: {total} documentos insertados en '{DB_NAME}.{COL_NAME}'")
     print("═" * 60)
     client.close()
+
 
 if __name__ == "__main__":
     main()
