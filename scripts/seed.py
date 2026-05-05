@@ -1,10 +1,8 @@
-"""
-seed_fintech_logs.py
-Módulo L03 — Poblado de datos para fintech_logs (MongoDB)
-Sistema de logs Nequi · 9.000 documentos realistas
-Ejecutar: python seed_fintech_logs.py
-"""
-
+import asyncio
+import os
+from datetime import datetime, timedelta, timezone
+from motor.motor_asyncio import AsyncIOMotorClient
+from faker import Faker
 import random
 import uuid
 from datetime import datetime, timedelta
@@ -20,8 +18,10 @@ COL_NAME  = "logs"
 TOTAL     = 9_000
 BATCH_SIZE = 500          # inserciones por lote (bulk_write)
 
-fake = Faker("es_CO")
-random.seed(42)
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+DB_NAME = os.getenv("DB_NAME", "nexlog")
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
 
 # ─── CATÁLOGOS DE NEGOCIO (contexto Nequi / Colombia) ─────────────────────────
 SERVICIOS = [
